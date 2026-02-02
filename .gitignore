@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# mpv binaries (large, download separately)
+*.dll
+*.dll.a
+*.7z
+mpv_lib/
+include/
+
+# Temp files
+*.json
+!requirements.txt
+fetch_mpv.py
+release.json
