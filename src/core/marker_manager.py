@@ -9,6 +9,7 @@ class Marker:
     label: str
     position: float
     color: str = "#FF6B6B"
+    memo: str = ""
 
     def __lt__(self, other: 'Marker') -> bool:
         return self.position < other.position
@@ -18,10 +19,11 @@ class Marker:
 class Segment:
     start_label: str
     end_label: str
+    display_name: str = ""
 
     @property
     def name(self) -> str:
-        return f"{self.start_label}{self.end_label}"
+        return self.display_name if self.display_name else f"{self.start_label}{self.end_label}"
 
 
 class MarkerManager:
@@ -68,13 +70,20 @@ class MarkerManager:
                 return m
         return None
 
+    def update_memo(self, label: str, memo: str) -> None:
+        for m in self._markers:
+            if m.label == label:
+                m.memo = memo
+                self._bus.emit("markers_changed", self.get_markers())
+                return
+
     def clear(self) -> None:
         self._markers.clear()
         self._label_counter = 0
         self._bus.emit("markers_changed", [])
 
     def to_dict(self) -> list[dict]:
-        return [{'label': m.label, 'position': m.position, 'color': m.color}
+        return [{'label': m.label, 'position': m.position, 'color': m.color, 'memo': m.memo}
                 for m in self._markers]
 
     def from_dict(self, data: list[dict]) -> None:

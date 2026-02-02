@@ -51,6 +51,17 @@ class MarkerPanel(ctk.CTkFrame):
             ctk.CTkLabel(row, text=seconds_to_mmss(marker.position),
                          width=90).pack(side="left", padx=2)
 
+            memo_entry = ctk.CTkEntry(row, width=140, placeholder_text="memo...")
+            if marker.memo:
+                memo_entry.insert(0, marker.memo)
+            memo_entry.pack(side="left", padx=2)
+            memo_entry.bind("<FocusOut>",
+                            lambda e, lbl=marker.label, ent=memo_entry:
+                            self.app.marker_manager.update_memo(lbl, ent.get().strip()))
+            memo_entry.bind("<Return>",
+                            lambda e, lbl=marker.label, ent=memo_entry:
+                            self.app.marker_manager.update_memo(lbl, ent.get().strip()))
+
             ctk.CTkButton(
                 row, text="\u2192", width=28,
                 command=lambda p=marker.position: self._seek_to(p)

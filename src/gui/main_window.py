@@ -90,10 +90,10 @@ class MainWindow(ctk.CTk):
     def _adjust_tempo(self, delta: float) -> None:
         new_val = self.app.audio_effects.tempo + delta
         self.app.audio_effects.tempo = new_val
-        self.effects_panel.tempo_slider.set(self.app.audio_effects.tempo)
-        self.effects_panel.tempo_label.configure(
-            text=f"{self.app.audio_effects.tempo:.2f}x"
-        )
+        tempo = self.app.audio_effects.tempo
+        self.effects_panel.tempo_slider.set(tempo)
+        self.effects_panel.tempo_label.configure(text=f"{tempo:.2f}x")
+        self.effects_panel._update_preset_highlight(tempo)
 
     def _adjust_transpose(self, delta: int) -> None:
         new_val = self.app.audio_effects.semitones + delta

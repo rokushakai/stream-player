@@ -35,8 +35,8 @@ class SequenceLooper:
             self._current_index = 0
             self._bus.emit("sequence_changed", self._segments, self._current_index)
 
-    def add_segment(self, start_label: str, end_label: str) -> None:
-        seg = Segment(start_label=start_label, end_label=end_label)
+    def add_segment(self, start_label: str, end_label: str, display_name: str = "") -> None:
+        seg = Segment(start_label=start_label, end_label=end_label, display_name=display_name)
         with self._lock:
             self._segments.append(seg)
             self._bus.emit("sequence_changed", self._segments, self._current_index)

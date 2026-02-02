@@ -45,6 +45,13 @@ class SequenceEditor(ctk.CTkFrame):
         self.end_menu.pack(side="left", padx=2)
         ctk.CTkButton(add_frame, text="+", width=30, command=self._add_segment).pack(side="left", padx=2)
 
+        # Segment name input
+        name_frame = ctk.CTkFrame(self, fg_color="transparent")
+        name_frame.pack(fill="x", padx=5, pady=1)
+        ctk.CTkLabel(name_frame, text="Name:").pack(side="left", padx=2)
+        self.name_entry = ctk.CTkEntry(name_frame, placeholder_text="e.g. 要件定義まとめ")
+        self.name_entry.pack(side="left", fill="x", expand=True, padx=2)
+
         # Control buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=5, pady=5)
@@ -84,7 +91,9 @@ class SequenceEditor(ctk.CTkFrame):
         start = self.start_var.get()
         end = self.end_var.get()
         if start and end and start != end:
-            self.app.sequence_looper.add_segment(start, end)
+            display_name = self.name_entry.get().strip()
+            self.app.sequence_looper.add_segment(start, end, display_name)
+            self.name_entry.delete(0, "end")
 
     def _start_sequence(self) -> None:
         self.app.sequence_looper.start()
@@ -112,8 +121,12 @@ class SequenceEditor(ctk.CTkFrame):
             row.pack(fill="x", pady=1)
 
             ctk.CTkLabel(row, text=f"{i+1}.", width=30).pack(side="left", padx=2)
-            ctk.CTkLabel(row, text=seg.name, width=50,
-                         font=("Courier", 13, "bold")).pack(side="left", padx=5)
+            range_label = f"{seg.start_label}{seg.end_label}"
+            ctk.CTkLabel(row, text=range_label, width=40,
+                         font=("Courier", 13, "bold")).pack(side="left", padx=2)
+            if seg.display_name:
+                ctk.CTkLabel(row, text=seg.display_name, width=120,
+                             anchor="w").pack(side="left", padx=2)
 
             ctk.CTkButton(
                 row, text="\u25B2", width=28,
