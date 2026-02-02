@@ -1,11 +1,17 @@
 import string
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from typing import Optional
 from .events import EventBus
 
 
+def _gen_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
 @dataclass
 class Marker:
+    id: str
     label: str
     position: float
     color: str = "#FF6B6B"
@@ -17,17 +23,13 @@ class Marker:
 
 @dataclass
 class Segment:
-    start_label: str
-    end_label: str
+    start_marker_id: str
+    end_marker_id: str
     display_name: str = ""
-
-    @property
-    def name(self) -> str:
-        return self.display_name if self.display_name else f"{self.start_label}{self.end_label}"
 
 
 class MarkerManager:
-    """Manages markers (labeled time points) with CRUD operations."""
+    """Manages markers with immutable IDs. Labels are display-only."""
 
     COLORS = [
         "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4",
@@ -51,31 +53,52 @@ class MarkerManager:
         if label is None:
             label = self._next_label()
         color = self.COLORS[len(self._markers) % len(self.COLORS)]
-        marker = Marker(label=label, position=position, color=color)
+        marker = Marker(id=_gen_id(), label=label, position=position, color=color)
         self._markers.append(marker)
         self._markers.sort()
         self._bus.emit("markers_changed", self.get_markers())
         return marker
 
-    def remove_marker(self, label: str) -> None:
-        self._markers = [m for m in self._markers if m.label != label]
+    def remove_marker(self, marker_id: str) -> None:
+        self._markers = [m for m in self._markers if m.id != marker_id]
         self._bus.emit("markers_changed", self.get_markers())
 
     def get_markers(self) -> list[Marker]:
         return list(self._markers)
 
-    def get_marker(self, label: str) -> Optional[Marker]:
+    def get_by_id(self, marker_id: str) -> Optional[Marker]:
+        for m in self._markers:
+            if m.id == marker_id:
+                return m
+        return None
+
+    def get_by_label(self, label: str) -> Optional[Marker]:
         for m in self._markers:
             if m.label == label:
                 return m
         return None
 
-    def update_memo(self, label: str, memo: str) -> None:
+    def update_position(self, marker_id: str, position: float) -> None:
         for m in self._markers:
-            if m.label == label:
+            if m.id == marker_id:
+                m.position = position
+                self._markers.sort()
+                self._bus.emit("markers_changed", self.get_markers())
+                return
+
+    def update_memo(self, marker_id: str, memo: str) -> None:
+        for m in self._markers:
+            if m.id == marker_id:
                 m.memo = memo
                 self._bus.emit("markers_changed", self.get_markers())
                 return
+
+    def swap_labels(self, id_a: str, id_b: str) -> None:
+        ma = self.get_by_id(id_a)
+        mb = self.get_by_id(id_b)
+        if ma and mb:
+            ma.label, mb.label = mb.label, ma.label
+            self._bus.emit("markers_changed", self.get_markers())
 
     def clear(self) -> None:
         self._markers.clear()
@@ -83,11 +106,16 @@ class MarkerManager:
         self._bus.emit("markers_changed", [])
 
     def to_dict(self) -> list[dict]:
-        return [{'label': m.label, 'position': m.position, 'color': m.color, 'memo': m.memo}
+        return [{'id': m.id, 'label': m.label, 'position': m.position,
+                 'color': m.color, 'memo': m.memo}
                 for m in self._markers]
 
     def from_dict(self, data: list[dict]) -> None:
-        self._markers = [Marker(**d) for d in data]
+        self._markers = []
+        for d in data:
+            if 'id' not in d:
+                d['id'] = _gen_id()
+            self._markers.append(Marker(**d))
         self._markers.sort()
         self._label_counter = len(self._markers)
         self._bus.emit("markers_changed", self.get_markers())

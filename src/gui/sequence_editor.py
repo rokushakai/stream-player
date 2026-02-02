@@ -3,12 +3,14 @@ from ..core.sequence_looper import SequenceLooper
 
 
 class SequenceEditor(ctk.CTkFrame):
-    """Sequence definition and reordering UI."""
+    """Sequence definition and reordering UI. Uses marker IDs internally,
+    displays labels in dropdowns for user convenience."""
 
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
         self._current_index = 0
+        self._marker_id_map = {}  # label -> id
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=5, pady=(5, 2))
@@ -32,7 +34,7 @@ class SequenceEditor(ctk.CTkFrame):
         self.list_frame = ctk.CTkScrollableFrame(self, height=120)
         self.list_frame.pack(fill="both", expand=True, padx=5, pady=2)
 
-        # Add segment
+        # Add segment (dropdowns show labels, resolve to IDs on add)
         add_frame = ctk.CTkFrame(self, fg_color="transparent")
         add_frame.pack(fill="x", padx=5, pady=2)
         ctk.CTkLabel(add_frame, text="Start:").pack(side="left", padx=2)
@@ -78,8 +80,12 @@ class SequenceEditor(ctk.CTkFrame):
         self.app.sequence_looper.loop_mode = mode_map.get(value, SequenceLooper.LOOP_SEQUENCE)
 
     def _on_markers_changed(self, markers) -> None:
+        self._marker_id_map = {m.label: m.id for m in markers}
         labels = [m.label for m in markers]
         self.after(0, lambda: self._update_dropdowns(labels))
+        # Also refresh segment list since labels may have changed
+        segments = self.app.sequence_looper.get_segments()
+        self.after(0, lambda: self._rebuild_list(segments))
 
     def _update_dropdowns(self, labels) -> None:
         if not labels:
@@ -88,11 +94,13 @@ class SequenceEditor(ctk.CTkFrame):
         self.end_menu.configure(values=labels)
 
     def _add_segment(self) -> None:
-        start = self.start_var.get()
-        end = self.end_var.get()
-        if start and end and start != end:
+        start_label = self.start_var.get()
+        end_label = self.end_var.get()
+        start_id = self._marker_id_map.get(start_label)
+        end_id = self._marker_id_map.get(end_label)
+        if start_id and end_id and start_id != end_id:
             display_name = self.name_entry.get().strip()
-            self.app.sequence_looper.add_segment(start, end, display_name)
+            self.app.sequence_looper.add_segment(start_id, end_id, display_name)
             self.name_entry.delete(0, "end")
 
     def _start_sequence(self) -> None:
@@ -121,7 +129,9 @@ class SequenceEditor(ctk.CTkFrame):
             row.pack(fill="x", pady=1)
 
             ctk.CTkLabel(row, text=f"{i+1}.", width=30).pack(side="left", padx=2)
-            range_label = f"{seg.start_label}{seg.end_label}"
+
+            # Resolve labels from IDs
+            range_label = self.app.sequence_looper.get_segment_label(seg)
             ctk.CTkLabel(row, text=range_label, width=40,
                          font=("Courier", 13, "bold")).pack(side="left", padx=2)
             if seg.display_name:

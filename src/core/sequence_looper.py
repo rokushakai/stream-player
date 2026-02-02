@@ -6,7 +6,10 @@ from .events import EventBus
 
 class SequenceLooper:
     """Manages ordered segment sequences and monitors playback position
-    to trigger seeks at segment boundaries."""
+    to trigger seeks at segment boundaries.
+
+    Segments reference markers by immutable ID. Loop ranges are
+    normalized to min/max of the two marker positions."""
 
     LOOP_SEQUENCE = "loop_sequence"
     LOOP_SINGLE = "loop_single"
@@ -29,14 +32,33 @@ class SequenceLooper:
     def set_seek_callback(self, callback: Callable[[float], None]) -> None:
         self._seek_callback = callback
 
+    def _resolve_range(self, seg: Segment) -> Optional[tuple[float, float]]:
+        """Resolve a segment to (start_time, end_time), normalized min/max."""
+        m1 = self._markers.get_by_id(seg.start_marker_id)
+        m2 = self._markers.get_by_id(seg.end_marker_id)
+        if m1 is None or m2 is None:
+            return None
+        return (min(m1.position, m2.position), max(m1.position, m2.position))
+
+    def get_segment_label(self, seg: Segment) -> str:
+        """Get display label like 'AB' from marker IDs."""
+        m1 = self._markers.get_by_id(seg.start_marker_id)
+        m2 = self._markers.get_by_id(seg.end_marker_id)
+        l1 = m1.label if m1 else "?"
+        l2 = m2.label if m2 else "?"
+        return f"{l1}{l2}"
+
     def set_segments(self, segments: list[Segment]) -> None:
         with self._lock:
             self._segments = list(segments)
             self._current_index = 0
             self._bus.emit("sequence_changed", self._segments, self._current_index)
 
-    def add_segment(self, start_label: str, end_label: str, display_name: str = "") -> None:
-        seg = Segment(start_label=start_label, end_label=end_label, display_name=display_name)
+    def add_segment(self, start_marker_id: str, end_marker_id: str,
+                    display_name: str = "") -> None:
+        seg = Segment(start_marker_id=start_marker_id,
+                      end_marker_id=end_marker_id,
+                      display_name=display_name)
         with self._lock:
             self._segments.append(seg)
             self._bus.emit("sequence_changed", self._segments, self._current_index)
@@ -48,6 +70,17 @@ class SequenceLooper:
                 if self._current_index >= len(self._segments) and self._segments:
                     self._current_index = 0
                 self._bus.emit("sequence_changed", self._segments, self._current_index)
+
+    def remove_segments_referencing(self, marker_id: str) -> None:
+        """Remove all segments that reference the given marker ID."""
+        with self._lock:
+            self._segments = [
+                s for s in self._segments
+                if s.start_marker_id != marker_id and s.end_marker_id != marker_id
+            ]
+            if self._current_index >= len(self._segments) and self._segments:
+                self._current_index = 0
+            self._bus.emit("sequence_changed", self._segments, self._current_index)
 
     def reorder(self, old_index: int, new_index: int) -> None:
         with self._lock:
@@ -93,11 +126,12 @@ class SequenceLooper:
                 return
 
             segment = self._segments[self._current_index]
-            end_marker = self._markers.get_marker(segment.end_label)
-            if end_marker is None:
+            time_range = self._resolve_range(segment)
+            if time_range is None:
                 return
 
-            if position >= end_marker.position - self.SEEK_THRESHOLD:
+            _, end_time = time_range
+            if position >= end_time - self.SEEK_THRESHOLD:
                 self._advance_segment()
 
     def _advance_segment(self) -> None:
@@ -121,6 +155,7 @@ class SequenceLooper:
             if not self._segments:
                 return
             segment = self._segments[self._current_index]
-        start_marker = self._markers.get_marker(segment.start_label)
-        if start_marker and self._seek_callback:
-            self._seek_callback(start_marker.position)
+        time_range = self._resolve_range(segment)
+        if time_range and self._seek_callback:
+            start_time, _ = time_range
+            self._seek_callback(start_time)

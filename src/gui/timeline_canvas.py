@@ -4,11 +4,12 @@ from ..utils.time_fmt import seconds_to_hms
 
 
 class TimelineCanvas(ctk.CTkFrame):
-    """Custom seekbar with marker visualization."""
+    """Custom seekbar with marker visualization and marker drag support."""
 
     TRACK_HEIGHT = 6
     MARKER_SIZE = 10
     CANVAS_HEIGHT = 44
+    MARKER_HIT_RADIUS = 12
 
     def __init__(self, parent, app):
         super().__init__(parent, height=self.CANVAS_HEIGHT)
@@ -16,7 +17,8 @@ class TimelineCanvas(ctk.CTkFrame):
         self._duration = 0.0
         self._position = 0.0
         self._markers = []
-        self._dragging = False
+        self._dragging_seekbar = False
+        self._dragging_marker_id = None
         self._active_segments = []
 
         self.canvas = tk.Canvas(
@@ -53,8 +55,17 @@ class TimelineCanvas(ctk.CTkFrame):
             return 0
         return max(0, min(self._duration, ((x - 10) / width) * self._duration))
 
+    def _hit_test_marker(self, x: float, y: float):
+        """Return the Marker hit by (x, y), or None. Checks top area only."""
+        cy = self.CANVAS_HEIGHT // 2
+        for marker in reversed(self._markers):
+            mx = self._pos_to_x(marker.position)
+            if abs(x - mx) <= self.MARKER_HIT_RADIUS and y <= cy + 4:
+                return marker
+        return None
+
     def _on_position_changed(self, position: float) -> None:
-        if not self._dragging:
+        if not self._dragging_seekbar and self._dragging_marker_id is None:
             self._position = position
             self.after(0, self._redraw)
             self.after(0, lambda: self.time_label.configure(
@@ -70,20 +81,38 @@ class TimelineCanvas(ctk.CTkFrame):
         self.after(0, self._redraw)
 
     def _on_click(self, event) -> None:
-        self._dragging = True
+        hit = self._hit_test_marker(event.x, event.y)
+        if hit:
+            self._dragging_marker_id = hit.id
+            self.canvas.configure(cursor="sb_h_double_arrow")
+            return
+
+        self._dragging_seekbar = True
         pos = self._x_to_pos(event.x)
         self._position = pos
         self._redraw()
 
     def _on_drag(self, event) -> None:
-        if self._dragging:
+        if self._dragging_marker_id:
+            pos = self._x_to_pos(event.x)
+            for m in self._markers:
+                if m.id == self._dragging_marker_id:
+                    m.position = pos
+                    break
+            self._redraw()
+        elif self._dragging_seekbar:
             pos = self._x_to_pos(event.x)
             self._position = pos
             self._redraw()
 
     def _on_release(self, event) -> None:
-        if self._dragging:
-            self._dragging = False
+        if self._dragging_marker_id:
+            pos = self._x_to_pos(event.x)
+            self.app.marker_manager.update_position(self._dragging_marker_id, pos)
+            self._dragging_marker_id = None
+            self.canvas.configure(cursor="hand2")
+        elif self._dragging_seekbar:
+            self._dragging_seekbar = False
             pos = self._x_to_pos(event.x)
             if self.app.player:
                 self.app.player.seek(pos)
@@ -93,13 +122,13 @@ class TimelineCanvas(ctk.CTkFrame):
         w = self.canvas.winfo_width()
         cy = self.CANVAS_HEIGHT // 2
 
-        # Draw active segment regions
+        # Active segment regions
         for seg in self._active_segments:
-            start_marker = self.app.marker_manager.get_marker(seg.start_label)
-            end_marker = self.app.marker_manager.get_marker(seg.end_label)
-            if start_marker and end_marker:
-                sx = self._pos_to_x(start_marker.position)
-                ex = self._pos_to_x(end_marker.position)
+            m1 = self.app.marker_manager.get_by_id(seg.start_marker_id)
+            m2 = self.app.marker_manager.get_by_id(seg.end_marker_id)
+            if m1 and m2:
+                sx = self._pos_to_x(min(m1.position, m2.position))
+                ex = self._pos_to_x(max(m1.position, m2.position))
                 self.canvas.create_rectangle(
                     sx, cy - self.TRACK_HEIGHT - 2,
                     ex, cy + self.TRACK_HEIGHT + 2,
@@ -128,11 +157,15 @@ class TimelineCanvas(ctk.CTkFrame):
         # Markers
         for marker in self._markers:
             mx = self._pos_to_x(marker.position)
+            is_dragging = (marker.id == self._dragging_marker_id)
+            outline = "#FFFFFF" if is_dragging else ""
+            outline_w = 2 if is_dragging else 0
+
             self.canvas.create_polygon(
                 mx, cy - self.TRACK_HEIGHT // 2 - 2,
                 mx - self.MARKER_SIZE // 2, cy - self.TRACK_HEIGHT // 2 - self.MARKER_SIZE - 2,
                 mx + self.MARKER_SIZE // 2, cy - self.TRACK_HEIGHT // 2 - self.MARKER_SIZE - 2,
-                fill=marker.color, outline=""
+                fill=marker.color, outline=outline, width=outline_w
             )
             self.canvas.create_text(
                 mx, cy - self.TRACK_HEIGHT // 2 - self.MARKER_SIZE - 5,
