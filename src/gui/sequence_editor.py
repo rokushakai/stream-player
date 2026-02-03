@@ -12,6 +12,8 @@ class SequenceEditor(ctk.CTkFrame):
         self.app = app
         self._current_index = 0
         self._marker_id_map = {}  # label -> id
+        self._pair_name_history = {}  # "AB" -> last used display_name
+        self._last_pair_key = ""  # tracks current dropdown pair like "AB"
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=5, pady=(5, 2))
@@ -44,11 +46,15 @@ class SequenceEditor(ctk.CTkFrame):
         add_frame.pack(fill="x", padx=5, pady=2)
         ctk.CTkLabel(add_frame, text="Start:").pack(side="left", padx=2)
         self.start_var = ctk.StringVar()
-        self.start_menu = ctk.CTkOptionMenu(add_frame, variable=self.start_var, values=[""], width=60)
+        self.start_menu = ctk.CTkOptionMenu(
+            add_frame, variable=self.start_var, values=[""], width=60,
+            command=lambda _: self._on_pair_dropdown_changed())
         self.start_menu.pack(side="left", padx=2)
         ctk.CTkLabel(add_frame, text="End:").pack(side="left", padx=2)
         self.end_var = ctk.StringVar()
-        self.end_menu = ctk.CTkOptionMenu(add_frame, variable=self.end_var, values=[""], width=60)
+        self.end_menu = ctk.CTkOptionMenu(
+            add_frame, variable=self.end_var, values=[""], width=60,
+            command=lambda _: self._on_pair_dropdown_changed())
         self.end_menu.pack(side="left", padx=2)
         ctk.CTkButton(add_frame, text="+ Add", width=60, command=self._add_segment).pack(side="left", padx=4)
 
@@ -116,6 +122,27 @@ class SequenceEditor(ctk.CTkFrame):
         self.start_menu.configure(values=labels)
         self.end_menu.configure(values=labels)
 
+    def _current_pair_key(self) -> str:
+        return f"{self.start_var.get()}{self.end_var.get()}"
+
+    def _on_pair_dropdown_changed(self) -> None:
+        """When Start/End dropdown changes, save current name and restore history."""
+        # Save current name for the old pair
+        old_key = self._last_pair_key
+        current_name = self.name_entry.get().strip()
+        if old_key and current_name:
+            self._pair_name_history[old_key] = current_name
+
+        new_key = self._current_pair_key()
+        self._last_pair_key = new_key
+
+        if new_key != old_key:
+            # Pair changed: restore history or clear
+            self.name_entry.delete(0, "end")
+            saved = self._pair_name_history.get(new_key, "")
+            if saved:
+                self.name_entry.insert(0, saved)
+
     def _add_segment(self) -> None:
         start_label = self.start_var.get()
         end_label = self.end_var.get()
@@ -124,7 +151,11 @@ class SequenceEditor(ctk.CTkFrame):
         if start_id and end_id and start_id != end_id:
             display_name = self.name_entry.get().strip()
             self.app.sequence_looper.add_segment(start_id, end_id, display_name)
-            self.name_entry.delete(0, "end")
+            # Save name for this pair (keep entry as-is for repeated adds)
+            pair_key = self._current_pair_key()
+            if display_name:
+                self._pair_name_history[pair_key] = display_name
+            self._last_pair_key = pair_key
 
     def _parse_batch(self, text: str) -> list[tuple[str, str, str]]:
         """Parse batch input text into list of (start_label, end_label, name).
