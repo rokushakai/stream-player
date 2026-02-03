@@ -3,18 +3,18 @@ from .events import EventBus
 
 
 class AudioEffects:
-    """Manages tempo and transpose via mpv's rubberband audio filter.
+    """Manages tempo and transpose for mpv playback.
 
-    - Tempo: mpv's speed property (rubberband preserves pitch)
-    - Transpose: rubberband's pitch-scale parameter
-    - Formula: pitch_scale = 2^(semitones/12)
+    - Tempo: mpv's speed property with audio_pitch_correction=True
+      (mpv uses scaletempo2 internally to preserve pitch)
+    - Transpose: lavfi asetrate + aresample for pitch shifting
     """
 
-    FILTER_LABEL = "rb"
     MIN_TEMPO = 0.25
     MAX_TEMPO = 2.0
     MIN_SEMITONES = -12
     MAX_SEMITONES = 12
+    SAMPLE_RATE = 48000
 
     def __init__(self, event_bus: EventBus):
         self._bus = event_bus
@@ -26,11 +26,8 @@ class AudioEffects:
         self._player = player
 
     def initialize_filter(self) -> None:
-        if self._player:
-            try:
-                self._player.set_af(f'@{self.FILTER_LABEL}:rubberband')
-            except Exception:
-                pass
+        """Apply initial audio filter. Called after media loads."""
+        self._apply_af()
 
     @property
     def tempo(self) -> float:
@@ -52,20 +49,38 @@ class AudioEffects:
     def semitones(self, value: int) -> None:
         value = max(self.MIN_SEMITONES, min(self.MAX_SEMITONES, value))
         self._semitones = value
-        pitch_scale = self._semitones_to_pitch_scale(value)
-        if self._player:
-            try:
-                self._player.af_command(
-                    self.FILTER_LABEL, 'set-pitch', str(pitch_scale)
-                )
-            except Exception:
-                pass
+        self._apply_af()
         self._bus.emit("effects_changed", self._tempo, self._semitones)
+
+    def _apply_af(self) -> None:
+        """Apply pitch shift using lavfi asetrate + aresample."""
+        if not self._player:
+            return
+
+        if self._semitones == 0:
+            af_str = ""
+        else:
+            # Pitch shift via sample rate manipulation
+            # To shift up: increase asetrate (plays faster at higher pitch)
+            # then aresample back to original rate (restores speed, keeps pitch)
+            pitch_ratio = math.pow(2.0, self._semitones / 12.0)
+            new_rate = int(self.SAMPLE_RATE * pitch_ratio)
+            af_str = f"lavfi=[asetrate={new_rate},aresample={self.SAMPLE_RATE}]"
+
+        try:
+            self._player.set_af(af_str)
+            print(f"[AudioEffects] af='{af_str}' semitones={self._semitones}")
+        except Exception as e:
+            print(f"[AudioEffects] set_af error: {e}")
 
     @staticmethod
     def _semitones_to_pitch_scale(semitones: int) -> float:
         return math.pow(2.0, semitones / 12.0)
 
     def reset(self) -> None:
-        self.tempo = 1.0
-        self.semitones = 0
+        self._tempo = 1.0
+        self._semitones = 0
+        if self._player:
+            self._player.speed = 1.0
+        self._apply_af()
+        self._bus.emit("effects_changed", self._tempo, self._semitones)

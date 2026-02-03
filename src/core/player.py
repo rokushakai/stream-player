@@ -16,7 +16,7 @@ class MpvPlayer:
             'input_vo_keyboard': False,
             'osc': False,
             'ytdl': True,
-            'audio_pitch_correction': False,
+            'audio_pitch_correction': True,
         }
         if wid is not None:
             mpv_kwargs['wid'] = str(wid)
