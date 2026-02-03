@@ -55,7 +55,10 @@ class MpvPlayer:
         self._mpv.stop()
 
     def seek(self, position: float, reference: str = "absolute+exact") -> None:
-        self._mpv.seek(position, reference)
+        try:
+            self._mpv.seek(position, reference)
+        except Exception as e:
+            print(f"[MpvPlayer] seek error: {e}")
 
     def seek_relative(self, offset: float) -> None:
         self._mpv.seek(offset, "relative+exact")

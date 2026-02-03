@@ -21,5 +21,7 @@ class EventBus:
         for cb in self._listeners.get(event, []):
             try:
                 cb(*args, **kwargs)
-            except Exception:
-                pass
+            except Exception as e:
+                import traceback
+                print(f"[EventBus] error in '{event}' handler {cb.__qualname__}: {e}")
+                traceback.print_exc()

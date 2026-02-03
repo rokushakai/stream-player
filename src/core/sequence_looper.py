@@ -1,4 +1,5 @@
 import threading
+import traceback
 from typing import Optional, Callable
 from .marker_manager import MarkerManager, Segment
 from .events import EventBus
@@ -25,7 +26,7 @@ class SequenceLooper:
         self._active: bool = False
         self._loop_mode: str = self.LOOP_SEQUENCE
         self._seek_callback: Optional[Callable[[float], None]] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         self._bus.on("position_changed", self._on_position_changed)
 
@@ -92,14 +93,23 @@ class SequenceLooper:
     def start(self) -> None:
         with self._lock:
             if not self._segments:
+                print("[SequenceLooper] start: no segments, ignoring")
                 return
             self._active = True
             self._current_index = 0
+            print(f"[SequenceLooper] start: active, index=0, segments={len(self._segments)}")
+        self._bus.emit("segment_changed", self._current_index)
         self._seek_to_current_start()
 
     def stop(self) -> None:
         with self._lock:
+            was_active = self._active
             self._active = False
+        if was_active:
+            print("[SequenceLooper] stop: deactivated")
+            self._bus.emit("sequence_changed", list(self._segments), self._current_index)
+        else:
+            print("[SequenceLooper] stop: already inactive")
 
     @property
     def active(self) -> bool:
@@ -132,6 +142,8 @@ class SequenceLooper:
 
             _, end_time = time_range
             if position >= end_time - self.SEEK_THRESHOLD:
+                label = self.get_segment_label(segment)
+                print(f"[SequenceLooper] boundary reached: {label} end={end_time:.2f} pos={position:.2f}")
                 self._advance_segment()
 
     def _advance_segment(self) -> None:
@@ -143,10 +155,14 @@ class SequenceLooper:
         elif self._loop_mode == self.PLAY_ONCE:
             if self._current_index + 1 >= len(self._segments):
                 self._active = False
-                self._bus.emit("sequence_changed", self._segments, self._current_index)
+                print("[SequenceLooper] play_once: finished all segments")
+                self._bus.emit("sequence_changed", list(self._segments), self._current_index)
                 return
             self._current_index += 1
 
+        seg = self._segments[self._current_index]
+        label = self.get_segment_label(seg)
+        print(f"[SequenceLooper] advance to index={self._current_index} ({label})")
         self._bus.emit("segment_changed", self._current_index)
         threading.Thread(target=self._seek_to_current_start, daemon=True).start()
 
@@ -158,4 +174,10 @@ class SequenceLooper:
         time_range = self._resolve_range(segment)
         if time_range and self._seek_callback:
             start_time, _ = time_range
-            self._seek_callback(start_time)
+            label = self.get_segment_label(segment)
+            print(f"[SequenceLooper] seeking to {label} start={start_time:.2f}")
+            try:
+                self._seek_callback(start_time)
+            except Exception as e:
+                print(f"[SequenceLooper] seek error: {e}")
+                traceback.print_exc()
