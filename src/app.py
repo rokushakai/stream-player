@@ -36,10 +36,12 @@ class App:
         def _load():
             try:
                 info = self.resolver.resolve(url)
-                self.window.after(0, lambda: self.window.url_bar.set_title(info.title))
+                title = info.title
+                self.window.after(0, lambda: self.window.url_bar.set_title(title))
                 self.window.after(0, lambda: self.window.title(
-                    f"Stream Player - {info.title}"
+                    f"Stream Player - {title}"
                 ))
+                self.window.after(0, lambda: self.window.url_bar.add_to_history(url, title))
                 self.player.load(url)
                 self.window.after(0, lambda: self.audio_effects.initialize_filter())
             except Exception as e:
