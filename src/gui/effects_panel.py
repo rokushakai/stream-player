@@ -38,12 +38,26 @@ class EffectsPanel(ctk.CTkFrame):
         transpose_frame = ctk.CTkFrame(self, fg_color="transparent")
         transpose_frame.pack(fill="x", padx=10, pady=2)
         ctk.CTkLabel(transpose_frame, text="Transpose:", width=80).pack(side="left")
+
+        # - button
+        ctk.CTkButton(
+            transpose_frame, text="-", width=32, height=26,
+            command=lambda: self._adjust_transpose(-1)
+        ).pack(side="left", padx=1)
+
         self.transpose_slider = ctk.CTkSlider(
             transpose_frame, from_=-12, to=12, number_of_steps=24,
             command=self._on_transpose_change
         )
         self.transpose_slider.set(0)
-        self.transpose_slider.pack(side="left", fill="x", expand=True, padx=10)
+        self.transpose_slider.pack(side="left", fill="x", expand=True, padx=5)
+
+        # + button
+        ctk.CTkButton(
+            transpose_frame, text="+", width=32, height=26,
+            command=lambda: self._adjust_transpose(1)
+        ).pack(side="left", padx=1)
+
         self.transpose_label = ctk.CTkLabel(transpose_frame, text="0 st", width=60)
         self.transpose_label.pack(side="left")
 
@@ -71,6 +85,16 @@ class EffectsPanel(ctk.CTkFrame):
     def _on_transpose_change(self, value: float) -> None:
         semitones = int(round(value))
         self.app.audio_effects.semitones = semitones
+        self._update_transpose_label(semitones)
+
+    def _adjust_transpose(self, delta: int) -> None:
+        new_val = self.app.audio_effects.semitones + delta
+        self.app.audio_effects.semitones = new_val
+        semitones = self.app.audio_effects.semitones
+        self.transpose_slider.set(semitones)
+        self._update_transpose_label(semitones)
+
+    def _update_transpose_label(self, semitones: int) -> None:
         sign = "+" if semitones > 0 else ""
         self.transpose_label.configure(text=f"{sign}{semitones} st")
 
