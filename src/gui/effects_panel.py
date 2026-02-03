@@ -49,6 +49,7 @@ class EffectsPanel(ctk.CTkFrame):
             transpose_frame, from_=-12, to=12, number_of_steps=24,
             command=self._on_transpose_change
         )
+        # Note: 24 steps across -12 to 12 = 1 semitone per step (correct)
         self.transpose_slider.set(0)
         self.transpose_slider.pack(side="left", fill="x", expand=True, padx=5)
 
