@@ -75,23 +75,47 @@ class MainWindow(ctk.CTk):
         )
         self._fullscreen_btn.pack(side="right", padx=5)
 
-        # Keyboard shortcuts
+        # Keyboard shortcuts (YouTube-style + app-specific)
+        # Playback: K/Space=pause, J=back 10s, L=fwd 10s
         self.bind("<space>", lambda e: self._on_key_space())
-        self.bind("m", lambda e: self._on_key_marker())
-        self.bind("M", lambda e: self._on_key_marker())
+        self.bind("k", lambda e: self._on_key_space())
+        self.bind("K", lambda e: self._on_key_space())
+        self.bind("j", lambda e: self._seek_rel(-10))
+        self.bind("J", lambda e: self._seek_rel(-10))
+        self.bind("l", lambda e: self._seek_rel(10))
+        self.bind("L", lambda e: self._seek_rel(10))
+        # Arrow seek: Left/Right=±5s, Shift=±1s
         self.bind("<Left>", lambda e: self._seek_rel(-5))
         self.bind("<Right>", lambda e: self._seek_rel(5))
         self.bind("<Shift-Left>", lambda e: self._seek_rel(-1))
         self.bind("<Shift-Right>", lambda e: self._seek_rel(1))
+        # Frame step: ,/. (while paused)
+        self.bind(",", lambda e: self._frame_step(-1))
+        self.bind(".", lambda e: self._frame_step(1))
+        # Speed: Shift+</> (Shift+comma / Shift+period)
+        self.bind("<less>", lambda e: self._adjust_tempo(-0.25))
+        self.bind("<greater>", lambda e: self._adjust_tempo(0.25))
+        # Volume: Up/Down arrows
+        self.bind("<Up>", lambda e: self._adjust_volume(5))
+        self.bind("<Down>", lambda e: self._adjust_volume(-5))
+        # Percentage jump: 0-9
+        for n in range(10):
+            self.bind(str(n), lambda e, pct=n: self._seek_percent(pct * 10))
+        # Fullscreen: F / F11
+        self.bind("f", lambda e: self._on_key_fullscreen())
+        self.bind("F", lambda e: self._on_key_fullscreen())
+        self.bind("<F11>", lambda e: self.toggle_fullscreen())
+        # Marker / Transpose / Tempo
+        self.bind("m", lambda e: self._on_key_marker())
+        self.bind("M", lambda e: self._on_key_marker())
         self.bind("[", lambda e: self._adjust_tempo(-0.05))
         self.bind("]", lambda e: self._adjust_tempo(0.05))
         self.bind("-", lambda e: self._adjust_transpose(-1))
         self.bind("=", lambda e: self._adjust_transpose(1))
         self.bind("+", lambda e: self._adjust_transpose(1))
-        self.bind("l", lambda e: self._on_key_looper())
-        self.bind("L", lambda e: self._on_key_looper())
+        # Looper: Ctrl+L (L is now YouTube-style forward)
+        self.bind("<Control-l>", lambda e: self._on_key_looper())
         self.bind("<Escape>", lambda e: self._on_escape())
-        self.bind("<F11>", lambda e: self.toggle_fullscreen())
         self.bind("<Double-Button-1>", lambda e: self._on_double_click(e))
 
     def toggle_fullscreen(self) -> None:
@@ -183,6 +207,33 @@ class MainWindow(ctk.CTk):
         s = self.app.audio_effects.semitones
         sign = "+" if s > 0 else ""
         self.effects_panel.transpose_label.configure(text=f"{sign}{s} st")
+
+    def _frame_step(self, direction: int) -> None:
+        if self._focus_on_entry():
+            return
+        if self.app.player:
+            if direction > 0:
+                self.app.player.frame_step()
+            else:
+                self.app.player.frame_back_step()
+
+    def _adjust_volume(self, delta: float) -> None:
+        if self._focus_on_entry():
+            return
+        if self.app.player:
+            self.app.player.volume = self.app.player.volume + delta
+
+    def _seek_percent(self, percent: int) -> None:
+        if self._focus_on_entry():
+            return
+        if self.app.player and self.app.player.duration:
+            pos = self.app.player.duration * (percent / 100.0)
+            self.app.player.seek(pos)
+
+    def _on_key_fullscreen(self) -> None:
+        if self._focus_on_entry():
+            return
+        self.toggle_fullscreen()
 
     def _on_key_marker(self) -> None:
         if self._focus_on_entry():

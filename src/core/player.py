@@ -83,6 +83,20 @@ class MpvPlayer:
     def speed(self, value: float) -> None:
         self._mpv.speed = max(0.25, min(2.0, value))
 
+    @property
+    def volume(self) -> float:
+        return self._mpv.volume
+
+    @volume.setter
+    def volume(self, value: float) -> None:
+        self._mpv.volume = max(0, min(100, value))
+
+    def frame_step(self) -> None:
+        self._mpv.command('frame-step')
+
+    def frame_back_step(self) -> None:
+        self._mpv.command('frame-back-step')
+
     def set_af(self, filter_string: str) -> None:
         self._mpv.af = filter_string
 
