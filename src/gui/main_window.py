@@ -77,8 +77,8 @@ class MainWindow(ctk.CTk):
 
         # Keyboard shortcuts
         self.bind("<space>", lambda e: self._on_key_space())
-        self.bind("m", lambda e: self.app.add_marker_at_current())
-        self.bind("M", lambda e: self.app.add_marker_at_current())
+        self.bind("m", lambda e: self._on_key_marker())
+        self.bind("M", lambda e: self._on_key_marker())
         self.bind("<Left>", lambda e: self._seek_rel(-5))
         self.bind("<Right>", lambda e: self._seek_rel(5))
         self.bind("<Shift-Left>", lambda e: self._seek_rel(-1))
@@ -88,8 +88,8 @@ class MainWindow(ctk.CTk):
         self.bind("-", lambda e: self._adjust_transpose(-1))
         self.bind("=", lambda e: self._adjust_transpose(1))
         self.bind("+", lambda e: self._adjust_transpose(1))
-        self.bind("l", lambda e: self._toggle_looper())
-        self.bind("L", lambda e: self._toggle_looper())
+        self.bind("l", lambda e: self._on_key_looper())
+        self.bind("L", lambda e: self._on_key_looper())
         self.bind("<Escape>", lambda e: self._on_escape())
         self.bind("<F11>", lambda e: self.toggle_fullscreen())
         self.bind("<Double-Button-1>", lambda e: self._on_double_click(e))
@@ -148,18 +148,25 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
+    def _focus_on_entry(self) -> bool:
+        """Check if focus is on a text entry widget."""
+        return isinstance(self.focus_get(), (ctk.CTkEntry, tk.Entry))
+
     def _on_key_space(self) -> None:
-        # Don't toggle if focus is on an entry widget
-        if isinstance(self.focus_get(), ctk.CTkEntry):
+        if self._focus_on_entry():
             return
         if self.app.player:
             self.app.player.toggle_pause()
 
     def _seek_rel(self, offset: float) -> None:
+        if self._focus_on_entry():
+            return
         if self.app.player:
             self.app.player.seek_relative(offset)
 
     def _adjust_tempo(self, delta: float) -> None:
+        if self._focus_on_entry():
+            return
         new_val = self.app.audio_effects.tempo + delta
         self.app.audio_effects.tempo = new_val
         tempo = self.app.audio_effects.tempo
@@ -168,6 +175,8 @@ class MainWindow(ctk.CTk):
         self.effects_panel._update_preset_highlight(tempo)
 
     def _adjust_transpose(self, delta: int) -> None:
+        if self._focus_on_entry():
+            return
         new_val = self.app.audio_effects.semitones + delta
         self.app.audio_effects.semitones = new_val
         self.effects_panel.transpose_slider.set(self.app.audio_effects.semitones)
@@ -175,7 +184,14 @@ class MainWindow(ctk.CTk):
         sign = "+" if s > 0 else ""
         self.effects_panel.transpose_label.configure(text=f"{sign}{s} st")
 
-    def _toggle_looper(self) -> None:
+    def _on_key_marker(self) -> None:
+        if self._focus_on_entry():
+            return
+        self.app.add_marker_at_current()
+
+    def _on_key_looper(self) -> None:
+        if self._focus_on_entry():
+            return
         if self.app.sequence_looper.active:
             self.app.sequence_looper.stop()
         else:

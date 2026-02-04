@@ -9,6 +9,8 @@ class MarkerPanel(ctk.CTkFrame):
         super().__init__(parent)
         self.app = app
         self._swap_selection = None  # marker ID selected for swap
+        self._rebuilding = False
+        self._memo_entries = {}  # marker_id -> entry widget
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=5, pady=(5, 2))
@@ -43,8 +45,21 @@ class MarkerPanel(ctk.CTkFrame):
         self.after(0, lambda: self._rebuild_list(markers))
 
     def _rebuild_list(self, markers) -> None:
+        # Save pending memo values before destroying widgets
+        self._rebuilding = True
+        for mid, entry in self._memo_entries.items():
+            try:
+                val = entry.get().strip()
+                m = self.app.marker_manager.get_by_id(mid)
+                if m and m.memo != val:
+                    m.memo = val  # Direct set without emitting event
+            except Exception:
+                pass
+        self._memo_entries = {}
+
         for widget in self.list_frame.winfo_children():
             widget.destroy()
+        self._rebuilding = False
 
         for marker in markers:
             is_swap_selected = (marker.id == self._swap_selection)
@@ -64,9 +79,10 @@ class MarkerPanel(ctk.CTkFrame):
             if marker.memo:
                 memo_entry.insert(0, marker.memo)
             memo_entry.pack(side="left", padx=2)
+            self._memo_entries[marker.id] = memo_entry
             memo_entry.bind("<FocusOut>",
                             lambda e, mid=marker.id, ent=memo_entry:
-                            self.app.marker_manager.update_memo(mid, ent.get().strip()))
+                            self._on_memo_focus_out(mid, ent))
             memo_entry.bind("<Return>",
                             lambda e, mid=marker.id, ent=memo_entry:
                             self.app.marker_manager.update_memo(mid, ent.get().strip()))
@@ -90,6 +106,15 @@ class MarkerPanel(ctk.CTkFrame):
                 row, text="\u00D7", width=28, fg_color="#CC3333",
                 command=lambda mid=marker.id: self._delete_marker(mid)
             ).pack(side="left", padx=1)
+
+    def _on_memo_focus_out(self, marker_id: str, entry) -> None:
+        if self._rebuilding:
+            return
+        try:
+            val = entry.get().strip()
+        except Exception:
+            return
+        self.app.marker_manager.update_memo(marker_id, val)
 
     def _on_swap_click(self, marker_id: str) -> None:
         if self._swap_selection is None:

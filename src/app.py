@@ -8,6 +8,8 @@ from .core.audio_effects import AudioEffects
 from .core.loop_settings_store import LoopSettingsStore
 from .gui.main_window import MainWindow
 
+SAVE_DEBOUNCE_MS = 2000  # Debounce auto-save by 2 seconds
+
 
 class App:
     """Application controller wiring core modules and GUI together."""
@@ -22,9 +24,10 @@ class App:
         self.player: MpvPlayer = None
         self._current_url: str | None = None
         self._restoring = False
+        self._save_timer: str | None = None
 
-        self.event_bus.on("markers_changed", lambda _: self._auto_save_loop_settings())
-        self.event_bus.on("sequence_changed", lambda _s, _i: self._auto_save_loop_settings())
+        self.event_bus.on("markers_changed", lambda _: self._schedule_auto_save())
+        self.event_bus.on("sequence_changed", lambda _s, _i: self._schedule_auto_save())
 
     def run(self) -> None:
         self.window = MainWindow(self)
@@ -66,7 +69,21 @@ class App:
             if pos is not None:
                 self.marker_manager.add_marker(pos)
 
-    def _auto_save_loop_settings(self) -> None:
+    def _schedule_auto_save(self) -> None:
+        """Debounce auto-save: waits for activity to settle before writing."""
+        if not self._current_url or self._restoring:
+            return
+        try:
+            if self._save_timer is not None:
+                self.window.after_cancel(self._save_timer)
+            self._save_timer = self.window.after(
+                SAVE_DEBOUNCE_MS, self._do_auto_save
+            )
+        except Exception:
+            pass
+
+    def _do_auto_save(self) -> None:
+        self._save_timer = None
         if not self._current_url or self._restoring:
             return
         self.loop_settings_store.save_for_url(

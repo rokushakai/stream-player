@@ -101,6 +101,16 @@ class SequenceLooper:
         self._bus.emit("segment_changed", self._current_index)
         self._seek_to_current_start()
 
+    def jump_to(self, index: int) -> None:
+        """Jump to a specific segment and continue playback from there."""
+        with self._lock:
+            if not self._segments or not (0 <= index < len(self._segments)):
+                return
+            self._active = True
+            self._current_index = index
+        self._bus.emit("segment_changed", self._current_index)
+        self._seek_to_current_start()
+
     def stop(self) -> None:
         with self._lock:
             was_active = self._active

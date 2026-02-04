@@ -126,7 +126,8 @@ class SequenceEditor(ctk.CTkFrame):
         return f"{self.start_var.get()}{self.end_var.get()}"
 
     def _on_pair_dropdown_changed(self) -> None:
-        """When Start/End dropdown changes, save current name and restore history."""
+        """When Start/End dropdown changes, save current name and restore history.
+        Auto-fills from start marker's memo if no custom name exists."""
         # Save current name for the old pair
         old_key = self._last_pair_key
         current_name = self.name_entry.get().strip()
@@ -137,11 +138,18 @@ class SequenceEditor(ctk.CTkFrame):
         self._last_pair_key = new_key
 
         if new_key != old_key:
-            # Pair changed: restore history or clear
             self.name_entry.delete(0, "end")
             saved = self._pair_name_history.get(new_key, "")
             if saved:
                 self.name_entry.insert(0, saved)
+            else:
+                # Auto-fill from start marker's memo
+                start_label = self.start_var.get()
+                start_id = self._marker_id_map.get(start_label)
+                if start_id:
+                    marker = self.app.marker_manager.get_by_id(start_id)
+                    if marker and marker.memo:
+                        self.name_entry.insert(0, marker.memo)
 
     def _add_segment(self) -> None:
         start_label = self.start_var.get()
@@ -270,18 +278,29 @@ class SequenceEditor(ctk.CTkFrame):
         for i, seg in enumerate(segments):
             is_active = (i == self._current_index and self.app.sequence_looper.active)
             fg = "#1F6AA5" if is_active else "transparent"
-            row = ctk.CTkFrame(self.list_frame, fg_color=fg)
+            row = ctk.CTkFrame(self.list_frame, fg_color=fg, cursor="hand2")
             row.pack(fill="x", pady=1)
 
-            ctk.CTkLabel(row, text=f"{i+1}.", width=30).pack(side="left", padx=2)
+            # Click row to jump to this segment
+            row.bind("<Button-1>", lambda e, idx=i: self._jump_to(idx))
+
+            indicator = "\u25B6 " if is_active else ""
+            idx_label = ctk.CTkLabel(row, text=f"{indicator}{i+1}.", width=40)
+            idx_label.pack(side="left", padx=2)
+            idx_label.bind("<Button-1>", lambda e, idx=i: self._jump_to(idx))
 
             # Resolve labels from IDs
             range_label = self.app.sequence_looper.get_segment_label(seg)
-            ctk.CTkLabel(row, text=range_label, width=40,
-                         font=("Courier", 13, "bold")).pack(side="left", padx=2)
+            range_lbl_widget = ctk.CTkLabel(row, text=range_label, width=40,
+                         font=("Courier", 13, "bold"))
+            range_lbl_widget.pack(side="left", padx=2)
+            range_lbl_widget.bind("<Button-1>", lambda e, idx=i: self._jump_to(idx))
+
             if seg.display_name:
-                ctk.CTkLabel(row, text=seg.display_name, width=120,
-                             anchor="w").pack(side="left", padx=2)
+                name_widget = ctk.CTkLabel(row, text=seg.display_name, width=120,
+                             anchor="w")
+                name_widget.pack(side="left", padx=2)
+                name_widget.bind("<Button-1>", lambda e, idx=i: self._jump_to(idx))
 
             ctk.CTkButton(
                 row, text="\u25B2", width=28,
@@ -295,6 +314,12 @@ class SequenceEditor(ctk.CTkFrame):
                 row, text="\u00D7", width=28, fg_color="#CC3333",
                 command=lambda idx=i: self.app.sequence_looper.remove_segment(idx)
             ).pack(side="left", padx=1)
+
+    def _jump_to(self, index: int) -> None:
+        """Jump to segment and start playback from there."""
+        self.app.sequence_looper.jump_to(index)
+        if self.app.player and self.app.player.paused:
+            self.app.player.play()
 
     def _move(self, old_idx: int, new_idx: int) -> None:
         segments = self.app.sequence_looper.get_segments()
