@@ -246,6 +246,17 @@ class SequenceEditor(ctk.CTkFrame):
     def _on_sequence_changed(self, segments, current_index) -> None:
         self._current_index = current_index
         self.after(0, lambda: self._rebuild_list(segments))
+        self.after(0, self._sync_loop_mode_dropdown)
+
+    def _sync_loop_mode_dropdown(self) -> None:
+        reverse_map = {
+            SequenceLooper.LOOP_SEQUENCE: "Loop Sequence",
+            SequenceLooper.LOOP_SINGLE: "Loop Single",
+            SequenceLooper.PLAY_ONCE: "Play Once",
+        }
+        current = self.app.sequence_looper.loop_mode
+        display = reverse_map.get(current, "Loop Sequence")
+        self.loop_mode_var.set(display)
 
     def _on_segment_changed(self, index) -> None:
         self._current_index = index

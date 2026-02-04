@@ -122,6 +122,7 @@ class SequenceLooper:
     @loop_mode.setter
     def loop_mode(self, mode: str) -> None:
         self._loop_mode = mode
+        self._bus.emit("sequence_changed", list(self._segments), self._current_index)
 
     def get_segments(self) -> list[Segment]:
         with self._lock:
@@ -129,6 +130,33 @@ class SequenceLooper:
 
     def get_current_index(self) -> int:
         return self._current_index
+
+    def to_dict(self) -> dict:
+        with self._lock:
+            return {
+                "segments": [
+                    {
+                        "start_marker_id": s.start_marker_id,
+                        "end_marker_id": s.end_marker_id,
+                        "display_name": s.display_name,
+                    }
+                    for s in self._segments
+                ],
+                "loop_mode": self._loop_mode,
+            }
+
+    def from_dict(self, data: dict) -> None:
+        with self._lock:
+            self._segments = []
+            for d in data.get("segments", []):
+                self._segments.append(Segment(
+                    start_marker_id=d["start_marker_id"],
+                    end_marker_id=d["end_marker_id"],
+                    display_name=d.get("display_name", ""),
+                ))
+            self._loop_mode = data.get("loop_mode", self.LOOP_SEQUENCE)
+            self._current_index = 0
+        self._bus.emit("sequence_changed", list(self._segments), self._current_index)
 
     def _on_position_changed(self, position: float) -> None:
         with self._lock:
